@@ -1,0 +1,42 @@
+#include "/Engine/Private/Common.ush"
+#include "/Engine/Private/ScreenPass.ush"
+#include "/Engine/Private/TemporalSuperResolution/TSRCommon.ush"
+//#include "/Engine/Private/TAACommon.ush"
+
+Texture2D SceneDepthTexture;
+Texture2D SceneVelocityTexture;
+RWTexture2D<float2> OutputMotionVectorTexture;
+
+[numthreads(THREADGROUP_SIZEX, THREADGROUP_SIZEY, THREADGROUP_SIZEZ)]
+void MainCS(uint3 DispatchThreadID : SV_DispatchThreadID)
+{   
+    uint width = View.ViewSizeAndInvSize.x;
+    uint height = View.ViewSizeAndInvSize.y;
+	
+	BRANCH
+    if (DispatchThreadID.x < width && DispatchThreadID.y < height)
+    {
+		uint2 pos = DispatchThreadID.xy;
+		float2 ViewportUV = (DispatchThreadID.xy + 0.5) * View.ViewSizeAndInvSize.zw;
+		float2 ScreenPos = ViewportUVToScreenPos(ViewportUV);
+
+		float DeviceZ = SceneDepthTexture[pos].x;
+
+		float2 Velocity = 0;
+		float4 EncodedVelocity = SceneVelocityTexture[pos];
+		if (EncodedVelocity.x > 0.0) 
+		{
+			Velocity = DecodeVelocityFromTexture(EncodedVelocity).xy;
+		}
+		else 
+		{
+			float3 PosN = float3(ScreenPos, DeviceZ);
+			float4 ThisClip = float4(PosN, 1);
+			float4 PrevClip = mul(ThisClip, View.ClipToPrevClip);
+			float2 PrevScreen = PrevClip.xy / PrevClip.w;
+			Velocity = PosN.xy - PrevScreen;
+		}
+	
+		OutputMotionVectorTexture[DispatchThreadID.xy] = Velocity * float2(0.5, -0.5);
+    }
+}
