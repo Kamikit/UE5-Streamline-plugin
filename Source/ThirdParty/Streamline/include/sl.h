@@ -469,6 +469,10 @@ enum class PreferenceFlags : uint64_t
     //! Optional - Enables loading of plugins downloaded Over The Air (OTA), to
     //! be used in conjunction with the eAllowOTA flag.
     eLoadDownloadedPlugins = 1 << 6,
+
+	//! Optional - allow tagging of resources for frame. This helps distinguish whether slEvaluateFeature needs to do frame-based tagging
+	//! of resources which wasn't the case earlier.
+	eUseFrameBasedResourceTagging = 1 << 7,
 };
 
 SL_ENUM_OPERATORS_64(PreferenceFlags)
@@ -665,6 +669,8 @@ using PFun_slEvaluateFeature = sl::Result(sl::Feature feature, const sl::FrameTo
 using PFun_slAllocateResources = sl::Result(sl::CommandBuffer* cmdBuffer, sl::Feature feature, const sl::ViewportHandle& viewport);
 using PFun_slFreeResources = sl::Result(sl::Feature feature, const sl::ViewportHandle& viewport);
 using PFun_slSetTag = sl::Result(const sl::ViewportHandle& viewport, const sl::ResourceTag* tags, uint32_t numTags, sl::CommandBuffer* cmdBuffer);
+// Streamline v2.9
+using PFun_slSetTagForFrame = sl::Result(const sl::FrameToken& frame, const sl::ViewportHandle& viewport, const sl::ResourceTag* tags, uint32_t numTags, sl::CommandBuffer* cmdBuffer);
 using PFun_slGetFeatureRequirements = sl::Result(sl::Feature feature, sl::FeatureRequirements& requirements);
 using PFun_slGetFeatureVersion = sl::Result(sl::Feature feature, sl::FeatureVersion& version);
 using PFun_slUpgradeInterface = sl::Result(void** baseInterface);

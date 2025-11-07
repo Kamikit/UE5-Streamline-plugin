@@ -831,10 +831,11 @@ FScreenPassTexture FStreamlineViewExtension::PostProcessPassAtEnd_RenderThread(F
 	
 			// then tagging the resources
 			const uint32 ViewId = StreamlineArguments.ViewId;
+			sl::FrameToken* FrameToken = FStreamlineCoreModule::GetStreamlineRHI()->GetFrameToken(GFrameCounterRenderThread);
 			RHICmdList.EnqueueLambda(
-			[LocalStreamlineRHIExtensions, ViewId, TexturesToTag](FRHICommandListImmediate& Cmd) mutable
+			[LocalStreamlineRHIExtensions, FrameToken, ViewId, TexturesToTag](FRHICommandListImmediate& Cmd) mutable
 			{
-				LocalStreamlineRHIExtensions->TagTextures(Cmd, ViewId, TexturesToTag);
+				LocalStreamlineRHIExtensions->TagTextures(Cmd, FrameToken, ViewId, TexturesToTag);
 			});
 		});
 	}

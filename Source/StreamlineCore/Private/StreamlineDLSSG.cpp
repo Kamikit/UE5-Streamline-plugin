@@ -397,11 +397,12 @@ static void DLSSGOnBackBufferReadyToPresent(SWindow& InWindow, const FTextureRHI
 				}
 
 				const uint32 ViewID = HasViewIdOverride () ? 0 : View.ViewKey;;
+				sl::FrameToken* FrameToken = FStreamlineCoreModule::GetStreamlineRHI()->GetFrameToken(GFrameCounterRenderThread);
 
 				RHICmdList.EnqueueLambda(
-					[RHIExtensions, UIColorAndAlpha, Backbuffer, ViewID](FRHICommandListImmediate& Cmd) mutable
+					[RHIExtensions, UIColorAndAlpha, Backbuffer, FrameToken, ViewID](FRHICommandListImmediate& Cmd) mutable
 					{
-						RHIExtensions->TagTextures(Cmd, ViewID, { Backbuffer,UIColorAndAlpha });
+						RHIExtensions->TagTextures(Cmd, FrameToken, ViewID, { Backbuffer,UIColorAndAlpha });
 					});
 			}
 	});

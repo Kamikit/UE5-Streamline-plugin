@@ -137,6 +137,7 @@ namespace
 	PFun_slAllocateResources*  Ptr_allocateResources = nullptr;
 	PFun_slFreeResources* Ptr_freeResources = nullptr;
 	PFun_slSetTag* Ptr_setTag = nullptr;
+	PFun_slSetTagForFrame* Ptr_setTagForFrame = nullptr;
 	PFun_slGetFeatureRequirements* Ptr_getFeatureRequirements = nullptr;
 	PFun_slGetFeatureVersion* Ptr_getFeatureVersion = nullptr;
 	PFun_slUpgradeInterface* Ptr_upgradeInterface = nullptr;
@@ -429,6 +430,17 @@ sl::Result SLsetTag(const sl::ViewportHandle& viewport, const sl::ResourceTag* t
 	return Ptr_setTag(viewport, tags, numTags, cmdBuffer);
 }
 
+sl::Result SLsetTagForFrame(const sl::FrameToken& frame, const sl::ViewportHandle& viewport, const sl::ResourceTag* tags, uint32_t numTags, sl::CommandBuffer* cmdBuffer)
+{
+	check(IsStreamlineSupported());
+	check(SLInterPoserDLL);
+	check(Ptr_setTagForFrame != nullptr);
+
+	// @Option_Streamline: Logging
+
+	return Ptr_setTagForFrame(frame, viewport, tags, numTags, cmdBuffer);
+}
+
 sl::Result SLgetFeatureRequirements(sl::Feature feature, sl::FeatureRequirements& requirements)
 {
 	check(IsStreamlineSupported());
@@ -627,6 +639,10 @@ bool LoadStreamlineFunctionPointers(const FString& InterposerBinaryPath)
 			Ptr_setTag = (PFun_slSetTag*)(FWindowsPlatformProcess::GetDllExport(SLInterPoserDLL, TEXT("slSetTag")));
 			UE_LOG(LogStreamlineRHI, Log, TEXT("slSetTag = %p"), Ptr_setTag);
 			check(Ptr_setTag);
+
+			Ptr_setTagForFrame = (PFun_slSetTagForFrame*)(FWindowsPlatformProcess::GetDllExport(SLInterPoserDLL, TEXT("slSetTagForFrame")));
+			UE_LOG(LogStreamlineRHI, Log, TEXT("slSetTagForFrame = %p"), Ptr_setTagForFrame);
+			check(Ptr_setTagForFrame);
 
 			Ptr_getFeatureRequirements = (PFun_slGetFeatureRequirements*)(FWindowsPlatformProcess::GetDllExport(SLInterPoserDLL, TEXT("slGetFeatureRequirements")));
 			UE_LOG(LogStreamlineRHI, Log, TEXT("slGetFeatureRequirements = %p"), Ptr_getFeatureRequirements);

@@ -28,6 +28,8 @@ extern STREAMLINERHI_API sl::Result SLevaluateFeature(sl::Feature feature, const
 extern STREAMLINERHI_API sl::Result SLAllocateResources(sl::CommandBuffer* cmdBuffer, sl::Feature feature, const sl::ViewportHandle& viewport);
 extern STREAMLINERHI_API sl::Result SLFreeResources(sl::Feature feature, const sl::ViewportHandle& viewport);
 extern STREAMLINERHI_API sl::Result SLsetTag(const sl::ViewportHandle& viewport, const sl::ResourceTag* tags, uint32_t numTags, sl::CommandBuffer* cmdBuffer);
+// Streamline v2.9
+extern STREAMLINERHI_API sl::Result SLsetTagForFrame(const sl::FrameToken& frame, const sl::ViewportHandle& viewport, const sl::ResourceTag* tags, uint32_t numTags, sl::CommandBuffer* cmdBuffer);
 extern STREAMLINERHI_API sl::Result SLgetFeatureRequirements(sl::Feature feature, sl::FeatureRequirements& requirements);
 extern STREAMLINERHI_API sl::Result SLgetFeatureVersion(sl::Feature feature, sl::FeatureVersion& version);
 extern STREAMLINERHI_API sl::Result SLUpgradeInterface(void** baseInterface);

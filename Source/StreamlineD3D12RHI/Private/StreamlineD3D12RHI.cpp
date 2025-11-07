@@ -200,7 +200,7 @@ public:
 		UE_LOG(LogStreamlineD3D12RHI, Log, TEXT("%s Leave"), ANSI_TO_TCHAR(__FUNCTION__));
 	}
 
-	virtual void TagTextures(FRHICommandList& CmdList, uint32 InViewID, const TArrayView<const FRHIStreamlineResource> InResources) final
+	virtual void TagTextures(FRHICommandList& CmdList, sl::FrameToken* FrameToken, uint32 InViewID, const TArrayView<const FRHIStreamlineResource> InResources) final
 	{
 		if (!InResources.Num()) // IsEmpty is only 5.1+
 		{
@@ -358,7 +358,11 @@ public:
 		// tag all the things
 		// note that NativeCmdList might be null if we only have resources to "Streamline nulltag"
 
-		SLsetTag(sl::ViewportHandle(InViewID), SLTags.GetData(), SLTags.Num(), NativeCmdList);
+		// Streamline v2.4.15
+		// SLsetTag(sl::ViewportHandle(InViewID), SLTags.GetData(), SLTags.Num(), NativeCmdList);
+
+		// Streamline v2.9
+		SLsetTagForFrame(*FrameToken, sl::ViewportHandle(InViewID), SLTags.GetData(), SLTags.Num(), NativeCmdList);
 
 		// then transition back to what was before
 		for (FStreamlineD3D12Transition& Transition : PostTagTransitions)

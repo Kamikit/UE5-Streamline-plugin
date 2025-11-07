@@ -363,7 +363,7 @@ void FStreamlineRHI::StreamlineEvaluateFGSR_SR(FRHICommandList& CmdList, const T
 	check(InputOutput[0].StreamlineTag == EStreamlineResource::Depth);
 	check(InputOutput[1].StreamlineTag == EStreamlineResource::MotionVectors);
 	check(InputOutput[2].StreamlineTag == EStreamlineResource::ScalingOutputColor);
-	TagTextures(CmdList, ViewID, InputOutput);
+	TagTextures(CmdList, FrameToken, ViewID, InputOutput);
 	sl::Feature SLFeature = sl::kFeatureFGSR_SR;
 
 	sl::CommandBuffer* NativeCommandBuffer = GetCommandBuffer(CmdList, InputOutput[2].Texture);
@@ -728,7 +728,7 @@ void FStreamlineRHIModule::InitializeStreamline()
 
 	Preferences.logMessageCallback = StreamlineLogSink;
 
-	Preferences.flags = sl::PreferenceFlags::eDisableCLStateTracking | sl::PreferenceFlags::eUseManualHooking;
+	Preferences.flags = sl::PreferenceFlags::eDisableCLStateTracking | sl::PreferenceFlags::eUseManualHooking | sl::PreferenceFlags::eUseFrameBasedResourceTagging;
 
 	Preferences.engine = sl::EngineType::eUnreal;
 	FString EngineVersion = FString::Printf(TEXT("%u.%u"), FEngineVersion::Current().GetMajor(), FEngineVersion::Current().GetMinor());

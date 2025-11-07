@@ -183,7 +183,7 @@ public:
 		UE_LOG(LogStreamlineD3D11RHI, Log, TEXT("%s Leave"), ANSI_TO_TCHAR(__FUNCTION__));
 	}
 
-	virtual void TagTextures(FRHICommandList& CmdList, uint32 InViewID, const TArrayView<const FRHIStreamlineResource> InResources) final
+	virtual void TagTextures(FRHICommandList& CmdList, sl::FrameToken* FrameToken, uint32 InViewID, const TArrayView<const FRHIStreamlineResource> InResources) final
 	{
 
 #if ENGINE_PROVIDES_ID3D11DYNAMICRHI
@@ -214,8 +214,11 @@ public:
 			Tag.lifecycle = sl::ResourceLifecycle::eOnlyValidNow;
 			Tag.extent = ToSL(Resource.ViewRect);
 
-			SLsetTag(sl::ViewportHandle(InViewID), &Tag, 1, NativeCmdBuffer);
 			
+			// Streamline v2.4.15
+			// SLsetTag(sl::ViewportHandle(InViewID), &Tag, 1, NativeCmdBuffer);
+			// Streamline v2.9
+			SLsetTagForFrame(*FrameToken, sl::ViewportHandle(InViewID), &Tag, 1, NativeCmdBuffer);
 		}
 	}
 	virtual void* GetCommandBuffer(FRHICommandList& CmdList, FRHITexture* Texture) override final

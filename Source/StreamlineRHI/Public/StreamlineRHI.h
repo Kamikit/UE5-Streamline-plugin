@@ -169,18 +169,20 @@ public:
 	
 	void TagTextures(FRHICommandList& CmdList, uint32 InViewID, std::initializer_list< FRHIStreamlineResource> InResources)
 	{
-		TagTextures(CmdList, InViewID, MakeArrayView(InResources));
+		sl::FrameToken* FrameToken = GetFrameToken(GFrameCounter);
+		TagTextures(CmdList, FrameToken, InViewID, MakeArrayView(InResources));
 	}
 
 	void TagTexture(FRHICommandList& CmdList, uint32 InViewID, const FRHIStreamlineResource& InResource)
 	{
-		TagTextures(CmdList, InViewID, MakeArrayView<const FRHIStreamlineResource>(&InResource, 1));
+		sl::FrameToken* FrameToken = GetFrameToken(GFrameCounter);
+		TagTextures(CmdList, FrameToken, InViewID, MakeArrayView<const FRHIStreamlineResource>(&InResource, 1));
 	}
 
 	// Implemented by API specific  subclasses
 	//	
 public: 
-	virtual void TagTextures(FRHICommandList& CmdList, uint32 InViewID, const TArrayView<const FRHIStreamlineResource> InResources) = 0;
+	virtual void TagTextures(FRHICommandList& CmdList, sl::FrameToken* FrameToken, uint32 InViewID, const TArrayView<const FRHIStreamlineResource> InResources) = 0;
 	virtual const sl::AdapterInfo* GetAdapterInfo() = 0;
 	virtual void APIErrorHandler(const sl::APIError& LastError) = 0;
 
