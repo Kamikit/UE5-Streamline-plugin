@@ -55,6 +55,7 @@ public:
 	virtual EStreamlineSupport QueryStreamlineSupport() const = 0;
 	virtual EStreamlineFeatureSupport QueryDLSSGSupport() const = 0;
 	virtual EStreamlineFeatureSupport QueryDeepDVCSupport() const = 0;
+	virtual FStreamlineFGSR_SRUpscaler* GetStreamlineTemporalUpscaler() const = 0;
 };
 
 class FStreamlineCoreModule final: public IStreamlineModuleInterface
@@ -70,8 +71,10 @@ public:
 
 	static FStreamlineRHI* GetStreamlineRHI();
 
-	// FStreamlineFGSR_SRUpscaler* GetStreamlineTemporalUpscaler() const;
+	FStreamlineFGSR_SRUpscaler* GetStreamlineTemporalUpscaler() const override;
+	void SetStreamlineTemporalUpscaler(TSharedPtr< FStreamlineFGSR_SRUpscaler, ESPMode::ThreadSafe> InUpscaler);
 private:
 
 	TSharedPtr< FStreamlineViewExtension, ESPMode::ThreadSafe> StreamlineViewExtension;
+	TSharedPtr< FStreamlineFGSR_SRUpscaler, ESPMode::ThreadSafe> StreamlineTemporalUpscaler;
 };

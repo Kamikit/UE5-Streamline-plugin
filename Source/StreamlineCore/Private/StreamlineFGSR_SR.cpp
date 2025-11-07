@@ -1,4 +1,5 @@
 #include "StreamlineFGSR_SR.h"
+#include "StreamlineFGSR_SRProxy.h"
 #include "StreamlineCore.h"
 #include "StreamlineCorePrivate.h"
 #include "StreamlineAPI.h"
@@ -14,6 +15,8 @@
 #include "ScenePrivate.h"
 #include "SystemTextures.h"
 #include "HAL/PlatformApplicationMisc.h"
+
+float FStreamlineFGSR_SRUpscaler::SavedScreenPercentage{ 100.0f };
 
 static TAutoConsoleVariable<int32> CVarStreamlineFGSR_SREnable(
 	TEXT("r.Streamline.FGSR_SR.Enable"),
@@ -38,9 +41,213 @@ static sl::FGSR_SRMode FGSR_SRModeFromCvar()
 	}
 }
 
+BEGIN_SHADER_PARAMETER_STRUCT(FFGSR_SRShaderParameters, )
+	SHADER_PARAMETER_RDG_TEXTURE(Texture2D, InputDepth)
+	SHADER_PARAMETER_RDG_TEXTURE(Texture2D, InputVelocity)
+	SHADER_PARAMETER_RDG_TEXTURE(Texture2D, OutputColor)
+END_SHADER_PARAMETER_STRUCT()
+
+FStreamlineFGSR_SRUpscaler::FStreamlineFGSR_SRUpscaler()
+{
+	FMemory::Memzero(PostInputs);
+
+	FConsoleVariableDelegate EnabledChangedDelegate = FConsoleVariableDelegate::CreateStatic(&FStreamlineFGSR_SRUpscaler::OnChangeFGSRTemporalUpscalingEnabled);
+	CVarStreamlineFGSR_SREnable->SetOnChangedCallback(EnabledChangedDelegate);
+
+	if (IsFGSR_SRActive())
+	{
+		SaveScreenPercentage();
+		UpdateScreenPercentage();
+	}
+}
+
+// @TODO_STREAMLINE: release resources
+FStreamlineFGSR_SRUpscaler::~FStreamlineFGSR_SRUpscaler()
+{
+	
+}
+
+void FStreamlineFGSR_SRUpscaler::SetPostProcessingInputs(FPostProcessingInputs const& NewInputs)
+{
+	PostInputs = NewInputs;
+}
+
+void FStreamlineFGSR_SRUpscaler::SetStreamlineRHIExtensions(FStreamlineRHI* InStreamlineRHIExtensions)
+{
+	StreamlineRHIExtensions = InStreamlineRHIExtensions;
+}
+
+void FStreamlineFGSR_SRUpscaler::SaveScreenPercentage()
+{
+	SavedScreenPercentage = IConsoleManager::Get().FindTConsoleVariableDataFloat(TEXT("r.ScreenPercentage"))->GetValueOnGameThread();
+}
+
+void FStreamlineFGSR_SRUpscaler::UpdateScreenPercentage()
+{
+	float UpsampleResolutionFraction = GetUpsampleResolutionFraction();
+	static IConsoleVariable* CVarScreenPercentage = IConsoleManager::Get().FindConsoleVariable(TEXT("r.ScreenPercentage"));
+	CVarScreenPercentage->Set(UpsampleResolutionFraction * 100.0f);
+}
+
+void FStreamlineFGSR_SRUpscaler::RestoreScreenPercentage()
+{
+	static IConsoleVariable* CVarScreenPercentage = IConsoleManager::Get().FindConsoleVariable(TEXT("r.ScreenPercentage"));
+	CVarScreenPercentage->Set(SavedScreenPercentage);
+}
+
+void FStreamlineFGSR_SRUpscaler::OnChangeFGSRTemporalUpscalingEnabled(IConsoleVariable* Var)
+{
+	if (IsFGSR_SRActive())
+	{
+		SaveScreenPercentage();
+		UpdateScreenPercentage();
+	}
+	else
+	{
+		RestoreScreenPercentage();
+	}
+}
+
 const TCHAR* FStreamlineFGSR_SRUpscaler::GetDebugName() const
 {
 	return TEXT("StreamlineFGSR_SR");
+}
+
+float FStreamlineFGSR_SRUpscaler::GetMinUpsampleResolutionFraction() const
+{
+	return 0.5f;
+}
+
+float FStreamlineFGSR_SRUpscaler::GetMaxUpsampleResolutionFraction() const
+{
+	return 0.5f;
+}
+
+float FStreamlineFGSR_SRUpscaler::GetUpsampleResolutionFraction()
+{
+	return 0.5f;
+}
+
+IFGSR_SRTemporalUpscaler* FStreamlineFGSR_SRUpscaler::Fork_GameThread(const class FSceneViewFamily& InViewFamily) const
+{
+	IStreamlineModuleInterface& StreamlineCoreModule = FModuleManager::GetModuleChecked<IStreamlineModuleInterface>("StreamlineCore");
+	return new FStreamlineFGSR_SRProxy(StreamlineCoreModule.GetStreamlineTemporalUpscaler());
+}
+
+IFGSR_SRTemporalUpscaler::FOutputs FStreamlineFGSR_SRUpscaler::AddPasses(
+	FRDGBuilder& GraphBuilder,
+	const FGSR_SRView& SceneView,
+	const FGSR_SRPassInput& PassInputs) const
+{
+	FOutputs Outputs;
+	
+	const FViewInfo& View = (FViewInfo&)(SceneView);
+
+	// @TODO_STREAMLINE: Get Input extents and output extents (SecondaryViewRect?)
+	FIntPoint InputExtents = View.ViewRect.Size();
+	FIntPoint InputExtentsQuantized;
+	FIntPoint OutputExtents = View.GetSecondaryViewRectSize();
+	FIntPoint OutputExtentsQuantized;
+
+	// @CHECK_STREAMLINE: Set common constants
+	FRHIStreamlineArguments StreamlineArguments = {};
+	FMemory::Memzero(&StreamlineArguments, sizeof(StreamlineArguments));
+
+	uint32 FrameId = GFrameCounterRenderThread;
+	uint32 ViewId = HasViewIdOverride() ? 0 : View.GetViewKey();
+
+	StreamlineArguments.FrameId = FrameId;
+	StreamlineArguments.ViewId = ViewId;
+
+	StreamlineArguments.bReset = SceneView.bCameraCut;
+
+	StreamlineArguments.bIsDepthInverted = true; // @TODO_STREAMLINE: check if depth is inverted
+
+	StreamlineArguments.JitterOffset = PassInputs.TemporalJitterPixels;
+
+	StreamlineArguments.CameraNear = IConsoleManager::Get().FindConsoleVariable(TEXT("r.Streamline.CustomCameraNearPlane"))->GetFloat();
+	StreamlineArguments.CameraFar = IConsoleManager::Get().FindConsoleVariable(TEXT("r.Streamline.CustomCameraFarPlane"))->GetFloat();
+	StreamlineArguments.CameraFOV = View.FOV;
+	StreamlineArguments.CameraAspectRatio = float(View.ViewRect.Width()) / float(View.ViewRect.Height());
+
+	const float MotionVectorScale = IConsoleManager::Get().FindConsoleVariable(TEXT("r.Streamline.MotionVectorScale"))->GetFloat();
+	const bool bDilateMotionVectors = IConsoleManager::Get().FindConsoleVariable(TEXT("r.Streamline.DilateMotionVectors"))->GetBool() != 0;
+	if (bDilateMotionVectors)
+	{
+		StreamlineArguments.MotionVectorScale = { MotionVectorScale / View.GetSecondaryViewRectSize().X, MotionVectorScale / View.GetSecondaryViewRectSize().Y };
+	}
+	else
+	{
+		StreamlineArguments.MotionVectorScale = { MotionVectorScale / View.ViewRect.Width() , MotionVectorScale / View.ViewRect.Height() };
+	}
+	StreamlineArguments.bAreMotionVectorsDilated = bDilateMotionVectors;
+
+	FViewUniformShaderParameters ViewUniformShaderParameters = *View.CachedViewUniformShaderParameters;
+
+	StreamlineArguments.bIsOrthographicProjection = !SceneView.IsPerspectiveProjection();
+	StreamlineArguments.ClipToCameraView = ViewUniformShaderParameters.ClipToView;
+	StreamlineArguments.ClipToLenseClip = FRHIStreamlineArguments::FMatrix44f::Identity;
+	StreamlineArguments.ClipToPrevClip = ViewUniformShaderParameters.ClipToPrevClip;
+	StreamlineArguments.PrevClipToClip = ViewUniformShaderParameters.ClipToPrevClip.Inverse();
+
+#if ENGINE_MAJOR_VERSION == 5
+#if ENGINE_MINOR_VERSION >= 4
+	StreamlineArguments.CameraOrigin = ViewUniformShaderParameters.ViewOriginLow;
+#else
+	StreamlineArguments.CameraOrigin = ViewUniformShaderParameters.RelativeWorldCameraOrigin;
+#endif
+#else
+	StreamlineArguments.CameraOrigin = ViewUniformShaderParameters.WorldCameraOrigin;
+#endif
+	StreamlineArguments.CameraUp = ViewUniformShaderParameters.ViewUp;
+	StreamlineArguments.CameraRight = ViewUniformShaderParameters.ViewRight;
+	StreamlineArguments.CameraForward = ViewUniformShaderParameters.ViewForward;
+	StreamlineArguments.CameraViewToClip = ViewUniformShaderParameters.ViewToClip;
+
+	StreamlineArguments.CameraPinholeOffset = FRHIStreamlineArguments::FVector2f::ZeroVector;
+
+	{
+		FFGSR_SRShaderParameters* PassParameters = GraphBuilder.AllocParameters<FFGSR_SRShaderParameters>();
+
+		FStreamlineRHI* LocalStreamlineRHIExtensions = this->StreamlineRHIExtensions;
+
+		GraphBuilder.AddPass(
+			RDG_EVENT_NAME("Streamline Common %dx%d FrameId=%u ViewID=%u", View.ViewRect.Width(), View.ViewRect.Height(), StreamlineArguments.FrameId, StreamlineArguments.ViewId),
+			PassParameters,
+			ERDGPassFlags::Compute | ERDGPassFlags::Raster | ERDGPassFlags::SkipRenderPass | ERDGPassFlags::NeverCull,
+			[LocalStreamlineRHIExtensions, PassParameters, StreamlineArguments](FRHICommandListImmediate& RHICmdList) mutable
+			{
+
+				// first the constants
+				RHICmdList.EnqueueLambda(
+					[LocalStreamlineRHIExtensions, StreamlineArguments](FRHICommandListImmediate& Cmd) mutable
+					{
+						LocalStreamlineRHIExtensions->SetStreamlineData(Cmd, StreamlineArguments);
+					});
+			});
+	}
+
+	// @TODO_STREAMLINE: Tag Resources for streamline (maybe in evaluate pass?)
+	FRDGTextureRef SceneColor = PassInputs.SceneColor.Texture;
+	FRDGTextureRef SceneDepth = PassInputs.SceneDepth.Texture;
+	FRDGTextureRef VelocityTexture = PassInputs.SceneVelocity.Texture;
+
+	QuantizeSceneBufferSize(InputExtents, InputExtentsQuantized);
+	QuantizeSceneBufferSize(OutputExtents, OutputExtentsQuantized);
+
+	static const auto CVarPostPropagateAlpha = IConsoleManager::Get().FindTConsoleVariableDataInt(TEXT("r.PostProcessing.PropagateAlpha"));
+	const bool bSupportsAlpha = (CVarPostPropagateAlpha && CVarPostPropagateAlpha->GetValueOnRenderThread() != 0);
+	EPixelFormat OutputFormat = (bSupportsAlpha) ? PF_FloatRGBA : PF_FloatR11G11B10;
+	FRDGTextureDesc OutputColorDesc = FRDGTextureDesc::Create2D(OutputExtentsQuantized, OutputFormat, FClearValueBinding::Black, TexCreate_ShaderResource | TexCreate_UAV | TexCreate_RenderTargetable);
+	FRDGTextureRef OutputTexture = GraphBuilder.CreateTexture(OutputColorDesc, TEXT("StreamlineFGSR_SROutputTexture"));
+
+	Outputs.FullRes.Texture = OutputTexture;
+	Outputs.FullRes.ViewRect = FIntRect(FIntPoint::ZeroValue, View.GetSecondaryViewRectSize());
+
+	// @TODO_STREAMLINE: call streamline FGSR_SR evaluate pass
+	AddStreamlineFGSR_SREvaluateRenderPass(StreamlineRHIExtensions, GraphBuilder, ViewId, FIntRect(FIntPoint::ZeroValue, View.GetSecondaryViewRectSize()), SceneDepth, VelocityTexture, OutputTexture);
+
+	return Outputs;
 }
 
 bool IsFGSR_SRActive()
@@ -48,11 +255,10 @@ bool IsFGSR_SRActive()
 	return FGSR_SRModeFromCvar() != sl::FGSR_SRMode::eOff ? true : false;
 }
 
-BEGIN_SHADER_PARAMETER_STRUCT(FFGSR_SRShaderParameters, )
-SHADER_PARAMETER_RDG_TEXTURE(Texture2D, InputDepth)
-SHADER_PARAMETER_RDG_TEXTURE(Texture2D, InputVelocity)
-SHADER_PARAMETER_RDG_TEXTURE(Texture2D, OutputColor)
-END_SHADER_PARAMETER_STRUCT()
+//void SetFGSROnChangedCallback(const FConsoleVariableDelegate& Callback)
+//{
+//	CVarStreamlineFGSR_SREnable->SetOnChangedCallback(Callback);
+//}
 
 void AddStreamlineFGSR_SRStateRenderPass(FRDGBuilder& GraphBuilder, uint32 ViewID)
 {

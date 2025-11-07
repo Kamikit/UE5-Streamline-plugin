@@ -104,6 +104,8 @@ public:
 
 	}
 
+	void PrePostProcessPass_RenderThread(FRDGBuilder& GraphBuilder, const FSceneView& View, const FPostProcessingInputs& Inputs) override;
+
 private:
 	FScreenPassTexture PostProcessPassAtEnd_RenderThread(FRDGBuilder& GraphBuilder, const FSceneView& View, const FPostProcessMaterialInputs& InOutInputs);
 	
@@ -115,3 +117,4 @@ private:
 	static FDelegateHandle OnPreResizeWindowBackBufferHandle;
 	static FDelegateHandle OnSlateWindowDestroyedHandle;
 };
+
