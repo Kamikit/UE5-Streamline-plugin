@@ -12,9 +12,11 @@
 #include "StreamlineViewExtension.h"
 
 #include "StreamlineCorePrivate.h"
+#include "StreamlineCore.h"
 #include "StreamlineDLSSG.h"
 #include "StreamlineDeepDVC.h"
 #include "StreamlineFGSR_SR.h"
+#include "StreamlineFGSR_SRProxy.h"
 #include "StreamlineRHI.h"
 #include "StreamlineAPI.h"
 
@@ -186,6 +188,16 @@ FStreamlineViewExtension::FStreamlineViewExtension(const FAutoRegister& AutoRegi
 	}
 #endif
 	// @TODO_SREAMLINE: create Upscaler
+
+	IStreamlineModuleInterface& StreamlineCoreModuleInterface = FModuleManager::GetModuleChecked<IStreamlineModuleInterface>("StreamlineCore");
+	if (StreamlineCoreModuleInterface.GetStreamlineTemporalUpscaler() == nullptr)
+	{
+		FStreamlineCoreModule& StreamlineCoreModule = (FStreamlineCoreModule&)StreamlineCoreModuleInterface;
+		TSharedPtr<FStreamlineFGSR_SRUpscaler, ESPMode::ThreadSafe> FGSR_SRUpscaler = MakeShared<FStreamlineFGSR_SRUpscaler, ESPMode::ThreadSafe>();
+		StreamlineCoreModule.SetStreamlineTemporalUpscaler(FGSR_SRUpscaler);
+		// Set RHI Extensions for FGSR_SR Upscaler
+		FGSR_SRUpscaler->SetStreamlineRHIExtensions(StreamlineRHIExtensions);
+	}
 }
 
 void FStreamlineViewExtension::SetupViewFamily(FSceneViewFamily& InViewFamily)
@@ -207,8 +219,33 @@ void FStreamlineViewExtension::BeginRenderViewFamily(FSceneViewFamily& InViewFam
 {
 	BeginRenderViewFamilyDLSSG(InViewFamily);
 	// @TODO_STREAMLINE: set Third Party Upscaler
+	IStreamlineModuleInterface& StreamlineCoreModuleInterface = FModuleManager::GetModuleChecked<IStreamlineModuleInterface>("StreamlineCore");
+	FStreamlineFGSR_SRUpscaler* Upscaler = StreamlineCoreModuleInterface.GetStreamlineTemporalUpscaler();
+	bool IsTemporalUpscalingRequested = false;
+	for (int i = 0; i < InViewFamily.Views.Num(); i++)
+	{
+		const FSceneView* View = InViewFamily.Views[i];
+		if (View->PrimaryScreenPercentageMethod == EPrimaryScreenPercentageMethod::TemporalUpscale)
+		{
+			IsTemporalUpscalingRequested = true;
+		}
+	}
+
+	if (IsTemporalUpscalingRequested && IsFGSR_SRActive() && (InViewFamily.GetTemporalUpscalerInterface() == nullptr))
+	{
+		//InViewFamily.SetTemporalUpscalerInterface(new FStreamlineFGSR_SRProxy(Upscaler));
+	}
 }
 
+void FStreamlineViewExtension::PrePostProcessPass_RenderThread(FRDGBuilder& GraphBuilder, const FSceneView& View, const FPostProcessingInputs& Inputs)
+{
+	if (IsFGSR_SRActive())
+	{
+		IStreamlineModuleInterface& StreamlineCoreModuleInterface = FModuleManager::GetModuleChecked<IStreamlineModuleInterface>("StreamlineCore");
+		// Set PostInputs for FGSR_SR Upscaler
+		StreamlineCoreModuleInterface.GetStreamlineTemporalUpscaler()->SetPostProcessingInputs(Inputs);
+	}
+}
 
 bool FStreamlineViewExtension::DebugViewTracking()
 {
@@ -601,7 +638,6 @@ FScreenPassTexture FStreamlineViewExtension::PostProcessPassAtEnd_RenderThread(F
 		StreamlineArguments.FrameId = FrameID;
 		StreamlineArguments.ViewId = ViewID;
 
-		// TODO STREAMLINE check for other conditions, similar to DLSS
 		StreamlineArguments.bReset = View.bCameraCut;
 
 		StreamlineArguments.bIsDepthInverted = true;
@@ -925,7 +961,7 @@ FScreenPassTexture FStreamlineViewExtension::PostProcessPassAtEnd_RenderThread(F
 		SLSceneColorWithoutHUD = GraphBuilder.CreateTexture(FGSR_SRIntermediateDesc, TEXT("Streamline.SceneColorWithoutHUD.FGSR_SR"));
 		AddDrawTexturePass(GraphBuilder, ViewInfo, SceneColor.Texture, SLSceneColorWithoutHUD, FIntPoint::ZeroValue, FIntPoint::ZeroValue, FIntPoint::ZeroValue);
 
-		//UE_LOG(LogTemp, Warning, TEXT("Scene Color Extents: %d, %d"), SLSceneColorWithoutHUD->Desc.Extent.X, SLSceneColorWithoutHUD->Desc.Extent.Y);
+		// UE_LOG(LogTemp, Warning, TEXT("Scene Color Extents: %d, %d"), SLSceneColorWithoutHUD->Desc.Extent.X, SLSceneColorWithoutHUD->Desc.Extent.Y);
 
 		AddStreamlineFGSR_SREvaluateRenderPass(StreamlineRHIExtensions, GraphBuilder, ViewID, SceneColor.ViewRect, SceneDepth, InputVelocity, SLSceneColorWithoutHUD);
 		AddDrawTexturePass(GraphBuilder, ViewInfo, SLSceneColorWithoutHUD, SceneColor.Texture, FIntPoint::ZeroValue, FIntPoint::ZeroValue, FIntPoint::ZeroValue);

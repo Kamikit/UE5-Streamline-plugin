@@ -187,6 +187,16 @@ EStreamlineFeatureSupport FStreamlineCoreModule::QueryDeepDVCSupport() const
 	return ::GetPlatformStreamlineRHI();
 }
 
+ FStreamlineFGSR_SRUpscaler* FStreamlineCoreModule::GetStreamlineTemporalUpscaler() const
+ {
+	 return StreamlineTemporalUpscaler.Get();
+ }
+
+ void FStreamlineCoreModule::SetStreamlineTemporalUpscaler(TSharedPtr<FStreamlineFGSR_SRUpscaler, ESPMode::ThreadSafe> InUpscaler)
+ {
+	 StreamlineTemporalUpscaler = InUpscaler;
+ }
+
 #undef LOCTEXT_NAMESPACE
 
 IMPLEMENT_MODULE(FStreamlineCoreModule, StreamlineCore)
