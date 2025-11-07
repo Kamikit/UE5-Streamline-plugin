@@ -16,6 +16,8 @@
 #include "SystemTextures.h"
 #include "HAL/PlatformApplicationMisc.h"
 
+#include "VelocityPreProcessingPass.h"
+
 float FStreamlineFGSR_SRUpscaler::SavedScreenPercentage{ 100.0f };
 
 static TAutoConsoleVariable<int32> CVarStreamlineFGSR_SREnable(
@@ -47,7 +49,7 @@ BEGIN_SHADER_PARAMETER_STRUCT(FFGSR_SRShaderParameters, )
 	SHADER_PARAMETER_RDG_TEXTURE(Texture2D, OutputColor)
 END_SHADER_PARAMETER_STRUCT()
 
-FStreamlineFGSR_SRUpscaler::FStreamlineFGSR_SRUpscaler()
+FStreamlineFGSR_SRUpscaler::FStreamlineFGSR_SRUpscaler(FStreamlineRHI* StreamlineRHI) : StreamlineRHIExtensions(StreamlineRHI)
 {
 	FMemory::Memzero(PostInputs);
 
@@ -70,11 +72,6 @@ FStreamlineFGSR_SRUpscaler::~FStreamlineFGSR_SRUpscaler()
 void FStreamlineFGSR_SRUpscaler::SetPostProcessingInputs(FPostProcessingInputs const& NewInputs)
 {
 	PostInputs = NewInputs;
-}
-
-void FStreamlineFGSR_SRUpscaler::SetStreamlineRHIExtensions(FStreamlineRHI* InStreamlineRHIExtensions)
-{
-	StreamlineRHIExtensions = InStreamlineRHIExtensions;
 }
 
 void FStreamlineFGSR_SRUpscaler::SaveScreenPercentage()
@@ -232,6 +229,8 @@ IFGSR_SRTemporalUpscaler::FOutputs FStreamlineFGSR_SRUpscaler::AddPasses(
 	FRDGTextureRef SceneDepth = PassInputs.SceneDepth.Texture;
 	FRDGTextureRef VelocityTexture = PassInputs.SceneVelocity.Texture;
 
+	FRDGTextureRef InputMotionVector = AddStreamlineVelocityPreProcessingPass(GraphBuilder, View, SceneDepth, VelocityTexture);
+
 	QuantizeSceneBufferSize(InputExtents, InputExtentsQuantized);
 	QuantizeSceneBufferSize(OutputExtents, OutputExtentsQuantized);
 
@@ -240,12 +239,15 @@ IFGSR_SRTemporalUpscaler::FOutputs FStreamlineFGSR_SRUpscaler::AddPasses(
 	EPixelFormat OutputFormat = (bSupportsAlpha) ? PF_FloatRGBA : PF_FloatR11G11B10;
 	FRDGTextureDesc OutputColorDesc = FRDGTextureDesc::Create2D(OutputExtentsQuantized, OutputFormat, FClearValueBinding::Black, TexCreate_ShaderResource | TexCreate_UAV | TexCreate_RenderTargetable);
 	FRDGTextureRef OutputTexture = GraphBuilder.CreateTexture(OutputColorDesc, TEXT("StreamlineFGSR_SROutputTexture"));
+	AddDrawTexturePass(GraphBuilder, View, SceneColor, OutputTexture, FIntPoint::ZeroValue, FIntPoint::ZeroValue, FIntPoint::ZeroValue);
 
 	Outputs.FullRes.Texture = OutputTexture;
 	Outputs.FullRes.ViewRect = FIntRect(FIntPoint::ZeroValue, View.GetSecondaryViewRectSize());
 
 	// @TODO_STREAMLINE: call streamline FGSR_SR evaluate pass
-	AddStreamlineFGSR_SREvaluateRenderPass(StreamlineRHIExtensions, GraphBuilder, ViewId, FIntRect(FIntPoint::ZeroValue, View.GetSecondaryViewRectSize()), SceneDepth, VelocityTexture, OutputTexture);
+	AddStreamlineFGSR_SREvaluateRenderPass(StreamlineRHIExtensions, GraphBuilder, ViewId, FIntRect(FIntPoint::ZeroValue, View.GetSecondaryViewRectSize()), SceneDepth, InputMotionVector, OutputTexture);
+
+	Outputs.NewHistory = new FStreamlineUpscalerHistory();
 
 	return Outputs;
 }

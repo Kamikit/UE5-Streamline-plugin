@@ -12,16 +12,52 @@
 using IFGSR_SRTemporalUpscaler = UE::Renderer::Private::ITemporalUpscaler;
 using FGSR_SRPassInput = UE::Renderer::Private::ITemporalUpscaler::FInputs;
 using FGSR_SRView = FSceneView;
+using IFGSR_SRTemporalUpscalerHistory = UE::Renderer::Private::ITemporalUpscaler::IHistory;
 #else
 using IFGSR_SRTemporalUpscaler = ITemporalUpscaler;
 using FGSR_SRPassInput = ITemporalUpscaler::FPassInputs;
 using FGSR_SRView = FViewInfo;
+using IFGSR_SRTemporalUpscalerHistory = ICustomTemporalAAHistory;
 #endif
+
+class FStreamlineUpscalerHistory final : public IFGSR_SRTemporalUpscalerHistory, public FRefCountBase
+{
+public:
+	FStreamlineUpscalerHistory() { }
+
+	virtual ~FStreamlineUpscalerHistory() { }
+
+	const TCHAR* GetDebugName() const override
+	{
+		return TEXT("StreamlineFGSR_SR");
+	}
+
+	uint64 GetGPUSizeBytes() const override
+	{
+		return 0;
+	}
+
+	uint32 AddRef() const final
+	{
+		return FRefCountBase::AddRef();
+	}
+
+	uint32 Release() const final
+	{
+		return FRefCountBase::Release();
+	}
+
+	uint32 GetRefCount() const final
+	{
+		return FRefCountBase::GetRefCount();
+	}
+
+};
 
 class FStreamlineFGSR_SRUpscaler final : public IFGSR_SRTemporalUpscaler
 {
 public:
-	FStreamlineFGSR_SRUpscaler();
+	FStreamlineFGSR_SRUpscaler(FStreamlineRHI* StreamlineRHI);
 	virtual ~FStreamlineFGSR_SRUpscaler();
 
 	const TCHAR* GetDebugName() const override;
@@ -38,7 +74,6 @@ public:
 		const FGSR_SRPassInput& PassInputs) const override;
 
 	void SetPostProcessingInputs(FPostProcessingInputs const& NewInputs);
-	void SetStreamlineRHIExtensions(FStreamlineRHI* InStreamlineRHIExtensions);
 
 	static void SaveScreenPercentage();
 	static void UpdateScreenPercentage();

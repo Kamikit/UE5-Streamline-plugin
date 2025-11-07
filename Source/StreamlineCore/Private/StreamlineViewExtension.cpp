@@ -193,10 +193,9 @@ FStreamlineViewExtension::FStreamlineViewExtension(const FAutoRegister& AutoRegi
 	if (StreamlineCoreModuleInterface.GetStreamlineTemporalUpscaler() == nullptr)
 	{
 		FStreamlineCoreModule& StreamlineCoreModule = (FStreamlineCoreModule&)StreamlineCoreModuleInterface;
-		TSharedPtr<FStreamlineFGSR_SRUpscaler, ESPMode::ThreadSafe> FGSR_SRUpscaler = MakeShared<FStreamlineFGSR_SRUpscaler, ESPMode::ThreadSafe>();
+		TSharedPtr<FStreamlineFGSR_SRUpscaler, ESPMode::ThreadSafe> FGSR_SRUpscaler = MakeShared<FStreamlineFGSR_SRUpscaler, ESPMode::ThreadSafe>(StreamlineRHIExtensions);
 		StreamlineCoreModule.SetStreamlineTemporalUpscaler(FGSR_SRUpscaler);
 		// Set RHI Extensions for FGSR_SR Upscaler
-		FGSR_SRUpscaler->SetStreamlineRHIExtensions(StreamlineRHIExtensions);
 	}
 }
 
@@ -233,7 +232,7 @@ void FStreamlineViewExtension::BeginRenderViewFamily(FSceneViewFamily& InViewFam
 
 	if (IsTemporalUpscalingRequested && IsFGSR_SRActive() && (InViewFamily.GetTemporalUpscalerInterface() == nullptr))
 	{
-		//InViewFamily.SetTemporalUpscalerInterface(new FStreamlineFGSR_SRProxy(Upscaler));
+		InViewFamily.SetTemporalUpscalerInterface(new FStreamlineFGSR_SRProxy(Upscaler));
 	}
 }
 
@@ -940,32 +939,32 @@ FScreenPassTexture FStreamlineViewExtension::PostProcessPassAtEnd_RenderThread(F
 	// @TODO: Set test Feature State(Feature constants)
 
 	// @TODO: Add test Feature
-	if (IsFGSR_SRActive())
-	{
-		// UE_LOG(LogTemp, Warning, TEXT("SLTest is active"));
-		AddStreamlineFGSR_SRStateRenderPass(GraphBuilder, ViewID);
+	//if (IsFGSR_SRActive())
+	//{
+	//	// UE_LOG(LogTemp, Warning, TEXT("SLTest is active"));
+	//	AddStreamlineFGSR_SRStateRenderPass(GraphBuilder, ViewID);
 
-		FSceneTextures SceneTextures = ViewInfo.GetSceneTextures();
+	//	FSceneTextures SceneTextures = ViewInfo.GetSceneTextures();
 
-		FRDGTextureRef SceneDepth = SceneTextures.Depth.Resolve;
-		check(SceneDepth);
+	//	FRDGTextureRef SceneDepth = SceneTextures.Depth.Resolve;
+	//	check(SceneDepth);
 
-		FRDGTextureRef SceneVelocity = FScreenPassTexture::CopyFromSlice(GraphBuilder, InOutInputs.GetInput(EPostProcessMaterialInput::Velocity)).Texture;
-		FRDGTextureRef InputVelocity = AddStreamlineVelocityPreProcessingPass(GraphBuilder, ViewInfo, SceneDepth, SceneVelocity);
-		check(SceneVelocity);
+	//	FRDGTextureRef SceneVelocity = FScreenPassTexture::CopyFromSlice(GraphBuilder, InOutInputs.GetInput(EPostProcessMaterialInput::Velocity)).Texture;
+	//	FRDGTextureRef InputVelocity = AddStreamlineVelocityPreProcessingPass(GraphBuilder, ViewInfo, SceneDepth, SceneVelocity);
+	//	check(SceneVelocity);
 
-		FRDGTextureRef SLSceneColorWithoutHUD = SceneColor.Texture;
-		FRDGTextureDesc FGSR_SRIntermediateDesc = SceneColor.Texture->Desc;
-		EnumAddFlags(FGSR_SRIntermediateDesc.Flags, TexCreate_ShaderResource | TexCreate_UAV);
-		EnumRemoveFlags(FGSR_SRIntermediateDesc.Flags, TexCreate_ResolveTargetable | TexCreate_Presentable);
-		SLSceneColorWithoutHUD = GraphBuilder.CreateTexture(FGSR_SRIntermediateDesc, TEXT("Streamline.SceneColorWithoutHUD.FGSR_SR"));
-		AddDrawTexturePass(GraphBuilder, ViewInfo, SceneColor.Texture, SLSceneColorWithoutHUD, FIntPoint::ZeroValue, FIntPoint::ZeroValue, FIntPoint::ZeroValue);
+	//	FRDGTextureRef SLSceneColorWithoutHUD = SceneColor.Texture;
+	//	FRDGTextureDesc FGSR_SRIntermediateDesc = SceneColor.Texture->Desc;
+	//	EnumAddFlags(FGSR_SRIntermediateDesc.Flags, TexCreate_ShaderResource | TexCreate_UAV);
+	//	EnumRemoveFlags(FGSR_SRIntermediateDesc.Flags, TexCreate_ResolveTargetable | TexCreate_Presentable);
+	//	SLSceneColorWithoutHUD = GraphBuilder.CreateTexture(FGSR_SRIntermediateDesc, TEXT("Streamline.SceneColorWithoutHUD.FGSR_SR"));
+	//	AddDrawTexturePass(GraphBuilder, ViewInfo, SceneColor.Texture, SLSceneColorWithoutHUD, FIntPoint::ZeroValue, FIntPoint::ZeroValue, FIntPoint::ZeroValue);
 
-		// UE_LOG(LogTemp, Warning, TEXT("Scene Color Extents: %d, %d"), SLSceneColorWithoutHUD->Desc.Extent.X, SLSceneColorWithoutHUD->Desc.Extent.Y);
+	//	// UE_LOG(LogTemp, Warning, TEXT("Scene Color Extents: %d, %d"), SLSceneColorWithoutHUD->Desc.Extent.X, SLSceneColorWithoutHUD->Desc.Extent.Y);
 
-		AddStreamlineFGSR_SREvaluateRenderPass(StreamlineRHIExtensions, GraphBuilder, ViewID, SceneColor.ViewRect, SceneDepth, InputVelocity, SLSceneColorWithoutHUD);
-		AddDrawTexturePass(GraphBuilder, ViewInfo, SLSceneColorWithoutHUD, SceneColor.Texture, FIntPoint::ZeroValue, FIntPoint::ZeroValue, FIntPoint::ZeroValue);
-	}
+	//	AddStreamlineFGSR_SREvaluateRenderPass(StreamlineRHIExtensions, GraphBuilder, ViewID, SceneColor.ViewRect, SceneDepth, InputVelocity, SLSceneColorWithoutHUD);
+	//	AddDrawTexturePass(GraphBuilder, ViewInfo, SLSceneColorWithoutHUD, SceneColor.Texture, FIntPoint::ZeroValue, FIntPoint::ZeroValue, FIntPoint::ZeroValue);
+	//}
 
 
 #if ENGINE_SUPPORTS_CLEARQUADALPHA
