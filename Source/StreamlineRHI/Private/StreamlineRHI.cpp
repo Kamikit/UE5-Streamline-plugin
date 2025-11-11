@@ -360,9 +360,10 @@ void FStreamlineRHI::StreamlineEvaluateDeepDVC(FRHICommandList& CmdList, const F
 
 void FStreamlineRHI::StreamlineEvaluateFGSR_SR(FRHICommandList& CmdList, const TArrayView<const FRHIStreamlineResource> InputOutput, sl::FrameToken* FrameToken, uint32 ViewID)
 {
-	check(InputOutput[0].StreamlineTag == EStreamlineResource::Depth);
-	check(InputOutput[1].StreamlineTag == EStreamlineResource::MotionVectors);
-	check(InputOutput[2].StreamlineTag == EStreamlineResource::ScalingOutputColor);
+	check(InputOutput[0].StreamlineTag == EStreamlineResource::ScalingInputColor);
+	check(InputOutput[1].StreamlineTag == EStreamlineResource::Depth);
+	check(InputOutput[2].StreamlineTag == EStreamlineResource::MotionVectors);
+	check(InputOutput[3].StreamlineTag == EStreamlineResource::ScalingOutputColor);
 	TagTextures(CmdList, FrameToken, ViewID, InputOutput);
 	sl::Feature SLFeature = sl::kFeatureFGSR_SR;
 

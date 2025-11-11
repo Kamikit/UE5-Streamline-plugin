@@ -311,7 +311,10 @@ public:
 					case EStreamlineResource::Backbuffer:
 						SLResource.state = 0;
 					case EStreamlineResource::ScalingOutputColor:
-					SLResource.state = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+						SLResource.state = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+						break;
+					case EStreamlineResource::ScalingInputColor:
+						SLResource.state = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE; // @TODO_STREAMLINE: verify
 						break;
 					default:
 						checkf(false, TEXT("Unimplemented tag type (streamline plugin developer should fix)"));

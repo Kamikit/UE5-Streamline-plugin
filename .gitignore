@@ -2,3 +2,7 @@ Intermediate/
 Resources/
 Docs/
 Binaries/Win64/
+.vs/
+.vscode/
+_project/
+_sdk/

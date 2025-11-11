@@ -72,6 +72,7 @@ inline sl::BufferType ToSL(EStreamlineResource InResourceTag)
 	case EStreamlineResource::HUDLessColor: return sl::kBufferTypeHUDLessColor;
 	case EStreamlineResource::UIColorAndAlpha: return sl::kBufferTypeUIColorAndAlpha;
 	case EStreamlineResource::Backbuffer: return sl::kBufferTypeBackbuffer;
+	case EStreamlineResource::ScalingInputColor: return sl::kBufferTypeScalingInputColor;
 	case EStreamlineResource::ScalingOutputColor: return sl::kBufferTypeScalingOutputColor;
 	}
 }

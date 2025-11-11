@@ -44,6 +44,7 @@ enum class EStreamlineResource
 	HUDLessColor,
 	UIColorAndAlpha,
 	Backbuffer,
+	ScalingInputColor,
 	ScalingOutputColor,
 	// we use this to size some arrays statically somewhere, but we also don't wanto have a real new enum value so we don't have to handle switch statements ...
 	Last = ScalingOutputColor

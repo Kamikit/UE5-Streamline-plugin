@@ -44,6 +44,7 @@ static sl::FGSR_SRMode FGSR_SRModeFromCvar()
 }
 
 BEGIN_SHADER_PARAMETER_STRUCT(FFGSR_SRShaderParameters, )
+	SHADER_PARAMETER_RDG_TEXTURE(Texture2D, InputColor)
 	SHADER_PARAMETER_RDG_TEXTURE(Texture2D, InputDepth)
 	SHADER_PARAMETER_RDG_TEXTURE(Texture2D, InputVelocity)
 	SHADER_PARAMETER_RDG_TEXTURE(Texture2D, OutputColor)
@@ -203,6 +204,18 @@ IFGSR_SRTemporalUpscaler::FOutputs FStreamlineFGSR_SRUpscaler::AddPasses(
 
 	StreamlineArguments.CameraPinholeOffset = FRHIStreamlineArguments::FVector2f::ZeroVector;
 
+	sl::FGSR_SRConstants FGSR_SRConstants = {};
+
+	QuantizeSceneBufferSize(InputExtents, InputExtentsQuantized);
+	QuantizeSceneBufferSize(OutputExtents, OutputExtentsQuantized);
+	//UE_LOG(LogStreamline, Warning, TEXT("LR Size=%d %d"), InputExtentsQuantized.X, InputExtentsQuantized.Y);
+	//UE_LOG(LogStreamline, Warning, TEXT("HR Size=%d %d"), OutputExtentsQuantized.X, OutputExtentsQuantized.Y);
+
+	FGSR_SRConstants.mode = sl::FGSR_SRMode::eOn;
+	FGSR_SRConstants.renderExtents = sl::float2(float(InputExtents.X), float(InputExtents.Y));
+	FGSR_SRConstants.presentationExtents = sl::float2(float(OutputExtents.X), float(OutputExtents.Y));
+	
+
 	{
 		FFGSR_SRShaderParameters* PassParameters = GraphBuilder.AllocParameters<FFGSR_SRShaderParameters>();
 
@@ -212,7 +225,7 @@ IFGSR_SRTemporalUpscaler::FOutputs FStreamlineFGSR_SRUpscaler::AddPasses(
 			RDG_EVENT_NAME("Streamline Common %dx%d FrameId=%u ViewID=%u", View.ViewRect.Width(), View.ViewRect.Height(), StreamlineArguments.FrameId, StreamlineArguments.ViewId),
 			PassParameters,
 			ERDGPassFlags::Compute | ERDGPassFlags::Raster | ERDGPassFlags::SkipRenderPass | ERDGPassFlags::NeverCull,
-			[LocalStreamlineRHIExtensions, PassParameters, StreamlineArguments](FRHICommandListImmediate& RHICmdList) mutable
+			[LocalStreamlineRHIExtensions, PassParameters, StreamlineArguments, FGSR_SRConstants, ViewId](FRHICommandListImmediate& RHICmdList) mutable
 			{
 
 				// first the constants
@@ -220,6 +233,11 @@ IFGSR_SRTemporalUpscaler::FOutputs FStreamlineFGSR_SRUpscaler::AddPasses(
 					[LocalStreamlineRHIExtensions, StreamlineArguments](FRHICommandListImmediate& Cmd) mutable
 					{
 						LocalStreamlineRHIExtensions->SetStreamlineData(Cmd, StreamlineArguments);
+					});
+				RHICmdList.EnqueueLambda(
+					[FGSR_SRConstants, ViewId](FRHICommandListImmediate& Cmd) mutable
+					{
+						CALL_SL_FEATURE_FN(sl::kFeatureFGSR_SR, slSetFGSR_SRConstants, &FGSR_SRConstants, 0, ViewId);
 					});
 			});
 	}
@@ -230,9 +248,6 @@ IFGSR_SRTemporalUpscaler::FOutputs FStreamlineFGSR_SRUpscaler::AddPasses(
 	FRDGTextureRef VelocityTexture = PassInputs.SceneVelocity.Texture;
 
 	FRDGTextureRef InputMotionVector = AddStreamlineVelocityPreProcessingPass(GraphBuilder, View, SceneDepth, VelocityTexture);
-
-	QuantizeSceneBufferSize(InputExtents, InputExtentsQuantized);
-	QuantizeSceneBufferSize(OutputExtents, OutputExtentsQuantized);
 
 	static const auto CVarPostPropagateAlpha = IConsoleManager::Get().FindTConsoleVariableDataInt(TEXT("r.PostProcessing.PropagateAlpha"));
 	const bool bSupportsAlpha = (CVarPostPropagateAlpha && CVarPostPropagateAlpha->GetValueOnRenderThread() != 0);
@@ -245,7 +260,7 @@ IFGSR_SRTemporalUpscaler::FOutputs FStreamlineFGSR_SRUpscaler::AddPasses(
 	Outputs.FullRes.ViewRect = FIntRect(FIntPoint::ZeroValue, View.GetSecondaryViewRectSize());
 
 	// @TODO_STREAMLINE: call streamline FGSR_SR evaluate pass
-	AddStreamlineFGSR_SREvaluateRenderPass(StreamlineRHIExtensions, GraphBuilder, ViewId, FIntRect(FIntPoint::ZeroValue, View.GetSecondaryViewRectSize()), SceneDepth, InputMotionVector, OutputTexture);
+	AddStreamlineFGSR_SREvaluateRenderPass(StreamlineRHIExtensions, GraphBuilder, ViewId, FIntRect(FIntPoint::ZeroValue, View.GetSecondaryViewRectSize()), SceneColor, SceneDepth, InputMotionVector, OutputTexture);
 
 	Outputs.NewHistory = new FStreamlineUpscalerHistory();
 
@@ -267,33 +282,40 @@ void AddStreamlineFGSR_SRStateRenderPass(FRDGBuilder& GraphBuilder, uint32 ViewI
 
 }
 
-void AddStreamlineFGSR_SREvaluateRenderPass(FStreamlineRHI* StreamlineRHIExtensions, FRDGBuilder& GraphBuilder, uint32 ViewID, const FIntRect& SecondaryViewRect, FRDGTextureRef SLSceneDepth, FRDGTextureRef SLSceneVelocity, FRDGTextureRef SLSceneColorWithoutHUD)
+void AddStreamlineFGSR_SREvaluateRenderPass(FStreamlineRHI* StreamlineRHIExtensions, FRDGBuilder& GraphBuilder, uint32 ViewID, const FIntRect& SecondaryViewRect, FRDGTextureRef SLInputColor, FRDGTextureRef SLSceneDepth, FRDGTextureRef SLSceneVelocity, FRDGTextureRef SLSceneColorWithoutHUD)
 {
 	FFGSR_SRShaderParameters* PassParameters = GraphBuilder.AllocParameters<FFGSR_SRShaderParameters>();
+	PassParameters->InputColor = SLInputColor;
 	PassParameters->InputDepth = SLSceneDepth;
 	PassParameters->InputVelocity = SLSceneVelocity;
 	PassParameters->OutputColor = SLSceneColorWithoutHUD;
+	// UE_LOG(LogStreamline, Warning, TEXT("Input Depth Size=%d %d"), SLSceneDepth->Desc.Extent.X, SLSceneDepth->Desc.Extent.Y);
+	// UE_LOG(LogStreamline, Warning, TEXT("SecondaryViewRect=%d,%d -> %d,%d"), SecondaryViewRect.Min.X, SecondaryViewRect.Min.Y, SecondaryViewRect.Max.X, SecondaryViewRect.Max.Y);
 	GraphBuilder.AddPass(
 		RDG_EVENT_NAME("Streamline FGSR_SR Evaluate ViewID = %u", ViewID),
 		PassParameters,
 		ERDGPassFlags::Compute | ERDGPassFlags::Raster | ERDGPassFlags::SkipRenderPass | ERDGPassFlags::NeverCull,
 		[StreamlineRHIExtensions, PassParameters, ViewID, SecondaryViewRect](FRHICommandListImmediate& RHICmdList) mutable
 		{
+			check(PassParameters->InputColor);
 			check(PassParameters->InputDepth);
 			check(PassParameters->InputVelocity);
 			check(PassParameters->OutputColor);
+			PassParameters->InputColor->MarkResourceAsUsed();
 			PassParameters->InputDepth->MarkResourceAsUsed();
 			PassParameters->InputVelocity->MarkResourceAsUsed();
 			PassParameters->OutputColor->MarkResourceAsUsed();
+			FRHITexture* FGSR_SRInputColor = PassParameters->InputColor->GetRHI();
 			FRHITexture* FGSR_SRInputDepth = PassParameters->InputDepth->GetRHI();
 			FRHITexture* FGSR_SRInputVelocity = PassParameters->InputVelocity->GetRHI();
 			FRHITexture* FGSR_SROutputColor = PassParameters->OutputColor->GetRHI();
 			RHICmdList.EnqueueLambda(
-				[StreamlineRHIExtensions, FGSR_SRInputDepth, FGSR_SRInputVelocity, FGSR_SROutputColor, ViewID, SecondaryViewRect](FRHICommandListImmediate& Cmd) mutable
+				[StreamlineRHIExtensions, FGSR_SRInputColor, FGSR_SRInputDepth, FGSR_SRInputVelocity, FGSR_SROutputColor, ViewID, SecondaryViewRect](FRHICommandListImmediate& Cmd) mutable
 				{
 					sl::FrameToken* FrameToken = FStreamlineCoreModule::GetStreamlineRHI()->GetFrameToken(GFrameCounterRenderThread);
 
 					TArray<FRHIStreamlineResource> FGSR_SRResource;
+					FGSR_SRResource.Add({ FGSR_SRInputColor, SecondaryViewRect, EStreamlineResource::ScalingInputColor });
 					FGSR_SRResource.Add({ FGSR_SRInputDepth, SecondaryViewRect, EStreamlineResource::Depth });
 					FGSR_SRResource.Add({ FGSR_SRInputVelocity, SecondaryViewRect, EStreamlineResource::MotionVectors });
 					FGSR_SRResource.Add({ FGSR_SROutputColor, SecondaryViewRect, EStreamlineResource::ScalingOutputColor });

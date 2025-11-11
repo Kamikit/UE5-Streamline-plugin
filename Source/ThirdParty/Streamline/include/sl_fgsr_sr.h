@@ -43,6 +43,9 @@ enum class FGSR_SRMode : uint32_t
 SL_STRUCT(FGSR_SRConstants, StructType({ 0x29df7fe0, 0x273a, 0x4d72, { 0xb4, 0x81, 0x2d, 0xc8, 0x23, 0xd5, 0xb1, 0xad } }), kStructVersion1)
     FGSR_SRMode mode = FGSR_SRMode::eOff;
 
+    sl::float2 renderExtents;
+    sl::float2 presentationExtents;
+
     //! IMPORTANT: New members go here or if optional can be chained in a new struct, see sl_struct.h for details
 };
 
@@ -54,4 +57,14 @@ SL_STRUCT(FGSR_SRSettings, StructType({ 0x39df7fe0, 0x283a, 0x4d72, { 0xb4, 0x81
     //! IMPORTANT: New members go here or if optional can be chained in a new struct, see sl_struct.h for details
 };
 
+}
+
+using PFun_slSetFGSR_SRConstants = sl::Result(const void* data, uint32_t frameIndex, uint32_t id);
+
+//! HELPERS
+//! 
+inline sl::Result slSetFGSR_SRConstants(const void* data, uint32_t frameIndex, uint32_t id)
+{
+	SL_FEATURE_FUN_IMPORT_STATIC(sl::kFeatureFGSR_SR, slSetFGSR_SRConstants);
+	return s_slSetFGSR_SRConstants(data, frameIndex, id);
 }
